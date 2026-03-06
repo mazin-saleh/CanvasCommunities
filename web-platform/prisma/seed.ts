@@ -15,15 +15,17 @@ async function main() {
 
   console.log("Resetting tables...");
 
-  // Delete memberships first
+  // Delete child tables first
   await prisma.membership.deleteMany({});
-
-  // Delete all tags (will automatically disconnect from users & communities)
   await prisma.tag.deleteMany({});
-
-  // Delete users and communities
   await prisma.user.deleteMany({});
   await prisma.community.deleteMany({});
+
+  // Reset sequences
+  await prisma.$executeRaw`ALTER SEQUENCE "User_id_seq" RESTART WITH 1;`;
+  await prisma.$executeRaw`ALTER SEQUENCE "Community_id_seq" RESTART WITH 1;`;
+  await prisma.$executeRaw`ALTER SEQUENCE "Tag_id_seq" RESTART WITH 1;`;
+  await prisma.$executeRaw`ALTER SEQUENCE "Membership_id_seq" RESTART WITH 1;`;
 
   console.log("Tables cleared, seeding new data...");
 

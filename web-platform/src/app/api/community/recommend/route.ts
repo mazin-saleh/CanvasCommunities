@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recommendCommunities } from "@/services/userService";
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    const { userId } = await req.json();
-    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+    const userIdParam = req.nextUrl.searchParams.get("userId");
+    const userId = Number(userIdParam);
+    if (!userId) {
+      return NextResponse.json({ error: "userId required" }, { status: 400 });
+    }
 
-    const recommendations = await recommendCommunities(userId);
-    return NextResponse.json(recommendations);
+    const communities = await recommendCommunities(userId);
+
+    return NextResponse.json(communities);
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
