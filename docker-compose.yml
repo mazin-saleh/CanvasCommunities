@@ -36,7 +36,7 @@ services:
       - ./web-platform:/app
       - /app/node_modules
       - /app/.next
-    command: ./start.sh
+    command: sh start.sh
 
   ml-engine:
     container_name: gatorcommunities-ml
