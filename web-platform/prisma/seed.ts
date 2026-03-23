@@ -1,16 +1,49 @@
-import { PrismaClient } from '../src/generated/prisma/client.ts'
-import { PrismaPg } from '@prisma/adapter-pg'
-import 'dotenv/config'
+import "dotenv/config";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from '../src/generated/prisma/client';
+import bcrypt from "bcrypt";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
-const prisma = new PrismaClient({ adapter })
+const connectionString = `${process.env.DATABASE_URL}`;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+
+const SALT_ROUNDS = 10;
 
 async function main() {
+  console.log("Resetting tables...");
+
+  // Delete child tables first (to avoid foreign key constraints)
+  await prisma.interaction.deleteMany({});
+  await prisma.membership.deleteMany({});
+  await prisma.$executeRaw`DELETE FROM "_UserInterests";`;
+  await prisma.$executeRaw`DELETE FROM "_CommunityTags";`;
+  await prisma.tag.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.community.deleteMany({});
+
+  // Reset sequences so IDs start from 1
+  await prisma.$executeRaw`ALTER SEQUENCE "User_id_seq" RESTART WITH 1;`;
+  await prisma.$executeRaw`ALTER SEQUENCE "Community_id_seq" RESTART WITH 1;`;
+  await prisma.$executeRaw`ALTER SEQUENCE "Tag_id_seq" RESTART WITH 1;`;
+  await prisma.$executeRaw`ALTER SEQUENCE "Membership_id_seq" RESTART WITH 1;`;
+  await prisma.$executeRaw`ALTER SEQUENCE "Interaction_id_seq" RESTART WITH 1;`;
+
+  console.log("Tables cleared, seeding new data...");
+
   // ---------------------------------------------------------------------------
-  // Tags — 15 across 5 categories
+  // Tags — Combined from both versions
   // ---------------------------------------------------------------------------
   const tagData = [
-    // Academic
+    // From teammate's version
+    { name: 'javascript' },
+    { name: 'react' },
+    { name: 'python' },
+    { name: 'ml' },
+    { name: 'gaming' },
+    { name: 'community' },
+    // From ML version - Academic
     { name: 'Engineering' },
     { name: 'Computer Science' },
     { name: 'Pre-Med' },
@@ -30,24 +63,39 @@ async function main() {
     { name: 'Robotics' },
     { name: 'AI & Machine Learning' },
     { name: 'Cybersecurity' },
-  ]
+  ];
 
-  const tags: { [name: string]: { id: number; name: string } } = {}
+  const tags: { [name: string]: { id: number; name: string } } = {};
   for (const t of tagData) {
-    const tag = await prisma.tag.upsert({
-      where: { name: t.name },
-      update: {},
-      create: t,
-    })
-    tags[tag.name] = tag
+    const tag = await prisma.tag.create({ data: t });
+    tags[tag.name] = tag;
   }
-
-  console.log(`Seeded ${Object.keys(tags).length} tags`)
+  console.log(`Seeded ${Object.keys(tags).length} tags`);
 
   // ---------------------------------------------------------------------------
-  // Communities — 8 clubs, each with 2–4 tags
+  // Communities — Combined from both versions
   // ---------------------------------------------------------------------------
   const communityData = [
+    // From teammate's version
+    {
+      name: 'Next.js Devs',
+      description: 'Next.js development community',
+      avatarUrl: 'https://picsum.photos/seed/nextjs/200',
+      tagNames: ['javascript', 'react'],
+    },
+    {
+      name: 'Python Enthusiasts',
+      description: 'Python programming and machine learning',
+      avatarUrl: 'https://picsum.photos/seed/python/200',
+      tagNames: ['python', 'ml'],
+    },
+    {
+      name: 'Gamers Hub',
+      description: 'Gaming community for all platforms',
+      avatarUrl: 'https://picsum.photos/seed/gaming/200',
+      tagNames: ['gaming', 'community'],
+    },
+    // From ML version
     {
       name: 'Gator Robotics',
       description: 'Build, compete, and innovate with autonomous robots at UF.',
@@ -96,14 +144,12 @@ async function main() {
       avatarUrl: 'https://picsum.photos/seed/leadership/200',
       tagNames: ['Leadership', 'Networking', 'Social'],
     },
-  ]
+  ];
 
-  const communities: { [name: string]: { id: number; name: string } } = {}
+  const communities: { [name: string]: { id: number; name: string } } = {};
   for (const c of communityData) {
-    const community = await prisma.community.upsert({
-      where: { name: c.name },
-      update: {},
-      create: {
+    const community = await prisma.community.create({
+      data: {
         name: c.name,
         description: c.description,
         avatarUrl: c.avatarUrl,
@@ -111,117 +157,115 @@ async function main() {
           connect: c.tagNames.map((n) => ({ name: n })),
         },
       },
-    })
-    communities[community.name] = community
+    });
+    communities[community.name] = community;
   }
-
-  console.log(`Seeded ${Object.keys(communities).length} communities`)
+  console.log(`Seeded ${Object.keys(communities).length} communities`);
 
   // ---------------------------------------------------------------------------
-  // Users — 5 users with varying interest profiles
+  // Users — Combined from both versions
   // ---------------------------------------------------------------------------
-  // user1: tech-heavy interests, many interactions → EASE can learn from them
-  // user2: tag-only interests, no interactions      → cold-start / Jaccard only
-  // user3: mixed interests, some interactions       → full hybrid
-  // user4: interests + interactions, different tags → full hybrid
-  // user5: no tags, no interactions                 → popularity baseline
   const userData = [
+    // From teammate's version
+    {
+      username: 'alice',
+      password: 'alice123',
+      interestTags: ['javascript', 'ml'],
+    },
+    {
+      username: 'bob',
+      password: 'bob123',
+      interestTags: ['gaming', 'react'],
+    },
+    {
+      username: 'carol',
+      password: 'carol123',
+      interestTags: ['python', 'ml'],
+    },
+    // From ML version
     {
       username: 'alice_tech',
-      password: 'hashed_pw_1',
+      password: 'alice123',
       interestTags: ['Engineering', 'Robotics', 'AI & Machine Learning', 'Computer Science'],
     },
     {
       username: 'bob_creative',
-      password: 'hashed_pw_2',
+      password: 'bob123',
       interestTags: ['Music', 'Dance', 'Art', 'Social'],
     },
     {
       username: 'carol_mixed',
-      password: 'hashed_pw_3',
+      password: 'carol123',
       interestTags: ['Leadership', 'Networking', 'Computer Science'],
     },
     {
       username: 'dave_outdoor',
-      password: 'hashed_pw_4',
+      password: 'dave123',
       interestTags: ['Outdoors', 'Fitness', 'Sports', 'Social'],
     },
     {
       username: 'eve_blank',
-      password: 'hashed_pw_5',
+      password: 'eve123',
       interestTags: [], // no interests, no interactions — tests popularity baseline
     },
-  ]
+  ];
 
-  const users: { [username: string]: { id: number; username: string } } = {}
+  const users: { [username: string]: { id: number; username: string } } = {};
   for (const u of userData) {
-    const user = await prisma.user.upsert({
-      where: { username: u.username },
-      update: {},
-      create: {
+    const hashedPassword = await bcrypt.hash(u.password, SALT_ROUNDS);
+    const user = await prisma.user.create({
+      data: {
         username: u.username,
-        password: u.password,
+        password: hashedPassword,
         interests: {
           connect: u.interestTags.map((n) => ({ name: n })),
         },
       },
-    })
-    users[user.username] = user
+    });
+    users[user.username] = user;
   }
-
-  console.log(`Seeded ${Object.keys(users).length} users`)
+  console.log(`Seeded ${Object.keys(users).length} users`);
 
   // ---------------------------------------------------------------------------
-  // Memberships — some users already joined some clubs
+  // Memberships — Combined from both versions
   // ---------------------------------------------------------------------------
   const membershipData = [
+    // From teammate's version
+    { username: 'alice', communityName: 'Next.js Devs' },
+    { username: 'alice', communityName: 'Python Enthusiasts' },
+    { username: 'bob', communityName: 'Gamers Hub' },
+    { username: 'carol', communityName: 'Python Enthusiasts' },
+    // From ML version
     { username: 'alice_tech', communityName: 'Gator Robotics' },
     { username: 'alice_tech', communityName: 'AI Society' },
     { username: 'carol_mixed', communityName: 'Student Leadership Forum' },
     { username: 'dave_outdoor', communityName: 'Outdoor Adventure Club' },
-  ]
+  ];
 
-  for (const m of membershipData) {
-    await prisma.membership.upsert({
-      where: {
-        userId_communityId: {
-          userId: users[m.username].id,
-          communityId: communities[m.communityName].id,
-        },
-      },
-      update: {},
-      create: {
-        userId: users[m.username].id,
-        communityId: communities[m.communityName].id,
-      },
-    })
-  }
-
-  console.log(`Seeded ${membershipData.length} memberships`)
+  await prisma.membership.createMany({
+    data: membershipData.map((m) => ({
+      userId: users[m.username].id,
+      communityId: communities[m.communityName].id,
+    })),
+    skipDuplicates: true,
+  });
+  console.log(`Seeded ${membershipData.length} memberships`);
 
   // ---------------------------------------------------------------------------
-  // Interactions — ~14 rows across different types and user profiles
-  //
-  // weights: view=0.5, click=1.0, rsvp=2.0, join=3.0
-  //
-  // alice_tech: heavy interactions on tech clubs → EASE learns her profile well
-  // carol_mixed: moderate interactions            → full hybrid
-  // dave_outdoor: a few interactions             → mild EASE signal
-  // bob_creative: NO interactions                → Jaccard-only cold-start
-  // eve_blank: NO tags, NO interactions          → popularity baseline
+  // Interactions — From ML version (teammate's version didn't have this)
   // ---------------------------------------------------------------------------
-  type InteractionType = 'view' | 'click' | 'rsvp' | 'join'
+  type InteractionType = 'view' | 'click' | 'rsvp' | 'join';
   const weightMap: Record<InteractionType, number> = {
     view: 0.5,
     click: 1.0,
     rsvp: 2.0,
     join: 3.0,
-  }
+  };
 
   const interactionData: {
-    username: string
-    communityName: string
-    type: InteractionType
+    username: string;
+    communityName: string;
+    type: InteractionType;
   }[] = [
     // alice_tech — heavy interactions across tech clubs
     { username: 'alice_tech', communityName: 'Cybersecurity Club', type: 'view' },
@@ -242,28 +286,25 @@ async function main() {
     { username: 'dave_outdoor', communityName: 'Music Collective', type: 'view' },
     { username: 'dave_outdoor', communityName: 'Outdoor Adventure Club', type: 'join' },
     { username: 'dave_outdoor', communityName: 'Gator Dance Collective', type: 'click' },
-  ]
+  ];
 
-  for (const i of interactionData) {
-    await prisma.interaction.create({
-      data: {
-        userId: users[i.username].id,
-        communityId: communities[i.communityName].id,
-        type: i.type,
-        weight: weightMap[i.type],
-      },
-    })
-  }
-
-  console.log(`Seeded ${interactionData.length} interactions`)
-  console.log('Seed complete.')
+  await prisma.interaction.createMany({
+    data: interactionData.map((i) => ({
+      userId: users[i.username].id,
+      communityId: communities[i.communityName].id,
+      type: i.type,
+      weight: weightMap[i.type],
+    })),
+  });
+  console.log(`Seeded ${interactionData.length} interactions`);
+  console.log('Seed complete.');
 }
 
 main()
   .catch((e) => {
-    console.error(e)
-    process.exit(1)
+    console.error(e);
+    process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect()
-  })
+    await prisma.$disconnect();
+  });
