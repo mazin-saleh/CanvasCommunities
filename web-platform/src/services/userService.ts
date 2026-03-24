@@ -119,11 +119,14 @@ export async function getUserCommunities(userId: number) {
 }
 
 // ML-powered recommendations with tag-based fallback
+const MAX_RECOMMENDATIONS = 15;
+
 export async function recommendCommunities(userId: number) {
   // First, check if ML recommendations exist in the Recommendation table
-  const mlRecommendations = await prisma.recommendation.findMany({
+  let mlRecommendations = await prisma.recommendation.findMany({
     where: { userId },
     orderBy: { score: 'desc' },
+    take: MAX_RECOMMENDATIONS,
     include: {
       community: {
         include: {
@@ -132,6 +135,29 @@ export async function recommendCommunities(userId: number) {
       }
     }
   });
+
+  // If no ML recs exist, try to compute them on-demand (awaited, not fire-and-forget)
+  if (mlRecommendations.length === 0) {
+    try {
+      const res = await fetch(
+        `${process.env.PYTHON_BACKEND_URL}/recommend/${userId}`,
+        { method: 'POST', signal: AbortSignal.timeout(5000) }
+      );
+      if (res.ok) {
+        // Re-fetch the now-populated recommendations
+        mlRecommendations = await prisma.recommendation.findMany({
+          where: { userId },
+          orderBy: { score: 'desc' },
+          take: MAX_RECOMMENDATIONS,
+          include: {
+            community: { include: { tags: true } }
+          }
+        });
+      }
+    } catch (err) {
+      console.error('ML on-demand computation failed:', err);
+    }
+  }
 
   // If ML recommendations exist, return them with scores preserved
   if (mlRecommendations.length > 0) {
@@ -143,7 +169,7 @@ export async function recommendCommunities(userId: number) {
     }));
   }
 
-  // Fallback to tag-based recommendations if no ML data
+  // Fallback to tag-based recommendations if ML engine is unavailable
   // Exclude communities the user has already joined
   return prisma.community.findMany({
     where: {
@@ -163,6 +189,7 @@ export async function recommendCommunities(userId: number) {
     include: {
       tags: true
     },
-    orderBy: { name: 'asc' }
+    orderBy: { name: 'asc' },
+    take: MAX_RECOMMENDATIONS,
   });
 }

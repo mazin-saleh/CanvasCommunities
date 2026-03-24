@@ -86,10 +86,10 @@ def _adapt_weights_for_cold_start(
         w["collab"] = 0.0
         w["popularity"] = 1.0
     elif all_collab_zero:
-        # No join history — split collab weight between content and popularity
-        w["content"] = 0.7
+        # No join history — heavily favor content so stated interests drive results
+        w["content"] = 0.85
         w["collab"] = 0.0
-        w["popularity"] = 0.3
+        w["popularity"] = 0.15
     elif all_content_zero:
         # No interests — split content weight between collab and popularity
         w["content"] = 0.0
