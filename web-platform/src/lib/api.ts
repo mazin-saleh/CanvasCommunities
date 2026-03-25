@@ -1,3 +1,4 @@
+// web-platform/src/lib/api.ts
 type User = {
   id: number;
   username: string;
@@ -13,6 +14,8 @@ type Community = {
 };
 
 async function request<T>(url: string, options: RequestInit): Promise<T> {
+  console.log("[api] request >", url, { method: options.method, body: options?.body ? JSON.parse(String(options.body)) : undefined });
+
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -21,8 +24,20 @@ async function request<T>(url: string, options: RequestInit): Promise<T> {
     },
   });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "API request failed");
+  let data: any;
+  try {
+    data = await res.json();
+  } catch (e) {
+    console.warn("[api] non-json response", url, e);
+    throw new Error("API returned non-JSON response");
+  }
+
+  if (!res.ok) {
+    console.error("[api] request failed <", url, res.status, data);
+    throw new Error(data.error || "API request failed");
+  }
+
+  console.log("[api] response <", url, data);
   return data;
 }
 
@@ -39,13 +54,27 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ userId, tagName }),
       }),
+    removeInterest: (userId: number, tagName: string): Promise<User> =>
+      request("/api/user/remove-interest", {
+        method: "PATCH",
+        body: JSON.stringify({ userId, tagName }),
+      }),
+    getInterests: (userId: number): Promise<{ id: number; name: string }[]> =>
+      request(`/api/user/interests?userId=${userId}`, { method: "GET" }),
     joinCommunity: (userId: number, communityId: number): Promise<any> =>
       request("/api/user/join-community", {
-        method: "POST",
+        method: "PATCH",
         body: JSON.stringify({ userId, communityId }),
       }),
-    getCommunities: (userId: number): Promise<Community[]> =>
-      request(`/api/user/communities?userId=${userId}`, { method: "GET" }),
+    getCommunities: (userId: number): Promise<any[]> =>
+      request(`/api/user/communities`, {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      }),
+  },
+  tags: {
+    getAll: (): Promise<{ id: number; name: string }[]> =>
+      request("/api/tags", { method: "GET" }),
   },
   community: {
     create: (name: string): Promise<Community> =>

@@ -6,19 +6,31 @@ import { Card, CardContent } from "@/components/ui/card";
 import Input from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { api } from "@/lib/api";
 
 export default function Signup() {
   const router = useRouter();
   const { login } = useAuth();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleSignup(e?: React.FormEvent) {
+  async function handleSignup(e?: React.FormEvent) {
     e?.preventDefault();
-    // Mock create account
-    const id = `u_${Date.now()}`;
-    login({ id, name: name || "Student" });
-    router.push("/recommended"); // onboarding will handle redirect to onboard pages if not completed
+    if (!username.trim() || !password.trim()) return;
+    setError("");
+    setLoading(true);
+
+    try {
+      const user = await api.user.create(username.trim(), password);
+      login({ id: String(user.id), name: user.username });
+      router.push("/onboarding/personalize");
+    } catch (err: any) {
+      setError(err.message || "Signup failed. Username may already be taken.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -32,17 +44,30 @@ export default function Signup() {
 
           <form onSubmit={handleSignup} className="space-y-3">
             <div>
-              <label className="text-sm block mb-1">Full name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} required />
+              <label className="text-sm block mb-1">Username</label>
+              <Input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
             </div>
 
             <div>
-              <label className="text-sm block mb-1">Email</label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label className="text-sm block mb-1">Password</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
             </div>
 
+            {error && <p className="text-sm text-red-500">{error}</p>}
+
             <div className="flex justify-between items-center mt-4">
-              <Button type="submit">Create account</Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Creating..." : "Create account"}
+              </Button>
               <Button variant="link" onClick={() => router.push("/login")}>
                 Already have an account?
               </Button>

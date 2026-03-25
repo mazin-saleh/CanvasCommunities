@@ -25,7 +25,7 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/gatorcommunities
-      PYTHON_BACKEND_URL: http://ml-engine:8001
+      PYTHON_BACKEND_URL: http://ml-engine:8000
       NODE_ENV: development
     ports:
       - "3000:3000"

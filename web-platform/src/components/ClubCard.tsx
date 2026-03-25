@@ -14,9 +14,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { api } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ClubCard({ club }: { club: Club }) {
+  const { user } = useAuth();
   const [joined, setJoined] = useState(Boolean(club.joined));
+  const [loading, setLoading] = useState(false);
 
   return (
     <Card className="transition-shadow hover:shadow-md">
@@ -57,9 +61,21 @@ export default function ClubCard({ club }: { club: Club }) {
             <Button
               size="sm"
               variant={joined ? "outline" : "default"}
-              onClick={() => setJoined((v) => !v)}
+              disabled={loading || joined}
+              onClick={async () => {
+                if (!user || joined) return;
+                setLoading(true);
+                try {
+                  await api.user.joinCommunity(Number(user.id), Number(club.id));
+                  setJoined(true);
+                } catch (err) {
+                  console.error("Failed to join community:", err);
+                } finally {
+                  setLoading(false);
+                }
+              }}
             >
-              {joined ? "Joined" : "Join"}
+              {loading ? "Joining..." : joined ? "Joined" : "Join"}
             </Button>
 
             <Link

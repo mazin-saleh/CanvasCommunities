@@ -9,6 +9,10 @@ export async function POST(req: NextRequest) {
     const user = await createUser(username, password);
     return NextResponse.json({ id: user.id, username: user.username });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // Prisma unique constraint error
+    if (err.code === "P2002") {
+      return NextResponse.json({ error: "Username already taken" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "Failed to create account" }, { status: 500 });
   }
 }

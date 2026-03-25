@@ -1,11 +1,34 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { DiscoveryClub } from "@/mocks/discovery";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { api } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function DiscoveryClubCard({ club }: { club: DiscoveryClub }) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [joined, setJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
+
+  async function handleJoin() {
+    if (!user || joined || joining) return;
+    setJoining(true);
+    try {
+      await api.user.joinCommunity(Number(user.id), Number(club.id));
+      setJoined(true);
+    } catch (err) {
+      console.error("Failed to join:", err);
+    } finally {
+      setJoining(false);
+    }
+  }
+
   return (
     <motion.article
       whileHover={{ scale: 1.02 }}
@@ -39,23 +62,36 @@ export default function DiscoveryClubCard({ club }: { club: DiscoveryClub }) {
           </div>
         </div>
 
-        {/* Next Meeting */}
-        <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs">
-          <p className="font-semibold text-slate-500 uppercase text-[10px] tracking-wide">
-            Next Meeting
-          </p>
-          <p className="mt-1 font-semibold">{club.nextMeeting.title}</p>
-          <p className="text-[13px]">{club.nextMeeting.datetime}</p>
-          <p className="text-slate-500 text-[13px]">{club.nextMeeting.location}</p>
-        </div>
+        {/* Tags */}
+        {club.tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {club.tags.slice(0, 4).map((tag) => (
+              <Badge key={tag} variant="secondary" className="text-[10px] px-2 py-0.5">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
 
-        {/* Actions - pinned to bottom */}
+        {/* Score indicator */}
+        {club.score != null && (
+          <div className="mt-2 text-[10px] text-slate-400">
+            {Math.round(club.score * 100)}% match
+          </div>
+        )}
+
+        {/* Actions */}
         <div className="mt-auto flex justify-between items-center pt-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => router.push(`/club/${club.id}`)}>
             View
           </Button>
-          <Button size="sm" className="bg-orange-500 hover:bg-orange-600">
-            Join
+          <Button
+            size="sm"
+            className={joined ? "bg-green-600 hover:bg-green-700" : "bg-orange-500 hover:bg-orange-600"}
+            onClick={handleJoin}
+            disabled={joined || joining}
+          >
+            {joined ? "Joined" : joining ? "Joining..." : "Join"}
           </Button>
         </div>
       </div>
