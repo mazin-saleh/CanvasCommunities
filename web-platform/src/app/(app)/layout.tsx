@@ -7,11 +7,14 @@ import { useEffect } from "react";
 import Layout from "@/components/Layout";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, onboarded } = useAuth();
+  const { user, onboarded, hydrated } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
+    // Wait for localStorage to be read before making redirect decisions
+    if (!hydrated) return;
+
     console.log("[AppLayout] auth state", { user, onboarded, pathname });
 
     // If not logged in → go to login
@@ -28,7 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-  }, [user, onboarded, pathname, router]);
+  }, [hydrated, user, onboarded, pathname, router]);
 
   return <Layout>{children}</Layout>;
 }

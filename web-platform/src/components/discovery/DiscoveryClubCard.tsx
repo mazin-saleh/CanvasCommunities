@@ -1,12 +1,34 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { DiscoveryClub } from "@/mocks/discovery";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { api } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function DiscoveryClubCard({ club }: { club: DiscoveryClub }) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [joined, setJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
+
+  async function handleJoin() {
+    if (!user || joined || joining) return;
+    setJoining(true);
+    try {
+      await api.user.joinCommunity(Number(user.id), Number(club.id));
+      setJoined(true);
+    } catch (err) {
+      console.error("Failed to join:", err);
+    } finally {
+      setJoining(false);
+    }
+  }
+
   return (
     <motion.article
       whileHover={{ scale: 1.02 }}
@@ -51,20 +73,25 @@ export default function DiscoveryClubCard({ club }: { club: DiscoveryClub }) {
           </div>
         )}
 
-        {/* Score indicator if available */}
+        {/* Score indicator */}
         {club.score != null && (
           <div className="mt-2 text-[10px] text-slate-400">
             {Math.round(club.score * 100)}% match
           </div>
         )}
 
-        {/* Actions - pinned to bottom */}
+        {/* Actions */}
         <div className="mt-auto flex justify-between items-center pt-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => router.push(`/club/${club.id}`)}>
             View
           </Button>
-          <Button size="sm" className="bg-orange-500 hover:bg-orange-600">
-            Join
+          <Button
+            size="sm"
+            className={joined ? "bg-green-600 hover:bg-green-700" : "bg-orange-500 hover:bg-orange-600"}
+            onClick={handleJoin}
+            disabled={joined || joining}
+          >
+            {joined ? "Joined" : joining ? "Joining..." : "Join"}
           </Button>
         </div>
       </div>

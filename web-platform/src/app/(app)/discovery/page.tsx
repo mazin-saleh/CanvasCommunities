@@ -7,20 +7,29 @@ import Input from "@/components/ui/input";
 import DiscoveryCarouselRow from "@/components/discovery/DiscoveryCarouselRow";
 import EventsYouMightLike from "@/components/discovery/EventsYouMightLike";
 import { api } from "@/lib/api";
-import useCurrentUser from "@/hooks/useCurrentUser";
+import { useAuth } from "@/context/AuthContext";
 
-const FILTER_CHIPS = [
-  "Computer Science",
-  "Food",
-  "Soccer",
-  "Tennis",
-  "Community",
-  "Social",
-  "Volleyball",
-  "Dentistry",
-  "Animals",
-  "Engineering",
-];
+// Collect unique tags from recommended clubs for filter chips
+function extractChips(clubs: any[], interests: string[]): string[] {
+  const tagCounts = new Map<string, number>();
+  for (const c of clubs) {
+    for (const t of c.tags || []) {
+      const name = typeof t === "string" ? t : t;
+      tagCounts.set(name, (tagCounts.get(name) || 0) + 1);
+    }
+  }
+  // Show user's interests first, then most common tags
+  const interestSet = new Set(interests);
+  const sorted = [...tagCounts.entries()]
+    .sort((a, b) => {
+      const aIsInterest = interestSet.has(a[0]) ? 1 : 0;
+      const bIsInterest = interestSet.has(b[0]) ? 1 : 0;
+      if (bIsInterest !== aIsInterest) return bIsInterest - aIsInterest;
+      return b[1] - a[1];
+    })
+    .map(([name]) => name);
+  return sorted.slice(0, 10);
+}
 
 function findScrollParent(el: Element | null): Element | null {
   let cur: Element | null = el;
@@ -34,11 +43,13 @@ function findScrollParent(el: Element | null): Element | null {
 }
 
 export default function DiscoveryPage() {
-  const currentUserId = useCurrentUser(1); // reads localStorage or falls back to 1
+  const { user, hydrated } = useAuth();
+  const currentUserId = hydrated && user ? Number(user.id) : null;
   const [query, setQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
 
   const [clubs, setClubs] = useState<any[]>([]);
+  const [userInterests, setUserInterests] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,8 +70,13 @@ export default function DiscoveryPage() {
         return;
       }
       try {
-        const data = await api.community.getRecommended(currentUserId);
+        // Fetch recs and user interests in parallel
+        const [data, interests] = await Promise.all([
+          api.community.getRecommended(currentUserId),
+          api.user.getInterests(currentUserId),
+        ]);
         if (!mounted) return;
+        setUserInterests(interests.map((t: any) => t.name));
         // map backend Community -> UI DiscoveryClub shape (use placeholders where schema lacks fields)
         const mapped = (Array.isArray(data) ? data : []).map((c: any) => ({
           id: String(c.id),
@@ -109,14 +125,23 @@ export default function DiscoveryPage() {
   };
 
   const forYouClubs = useMemo(() => applyFilters(clubs), [clubs, query, activeFilters]);
-  const foodClubs = useMemo(
-    () => applyFilters(clubs.filter((c) => (c.tags || []).some((t: any) => t.toLowerCase() === "food"))),
-    [clubs, query, activeFilters]
-  );
-  const soccerClubs = useMemo(
-    () => applyFilters(clubs.filter((c) => (c.tags || []).some((t: any) => t.toLowerCase() === "soccer"))),
-    [clubs, query, activeFilters]
-  );
+
+  // Build "Since you liked X" rows from the user's actual interests
+  // Pick up to 2 interests that have matching clubs
+  const interestRows = useMemo(() => {
+    if (userInterests.length === 0) return [];
+    return userInterests
+      .map((interest) => {
+        const matched = applyFilters(
+          clubs.filter((c) =>
+            (c.tags || []).some((t: any) => t.toLowerCase() === interest.toLowerCase())
+          )
+        );
+        return { interest, clubs: matched };
+      })
+      .filter((row) => row.clubs.length > 0)
+      .slice(0, 2);
+  }, [clubs, userInterests, query, activeFilters]);
 
   const controlsRef = useRef<HTMLDivElement | null>(null);
   const pageWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -214,7 +239,7 @@ export default function DiscoveryPage() {
 
               {/* Chips */}
               <div className="flex gap-3 overflow-x-auto whitespace-nowrap no-scrollbar pb-1">
-                {FILTER_CHIPS.map((chip) => {
+                {extractChips(clubs, userInterests).map((chip: string) => {
                   const active = activeFilters.includes(chip);
                   return (
                     <motion.button
@@ -254,27 +279,19 @@ export default function DiscoveryPage() {
                     rowHeight={rowHeight}
                   />
 
-                  <DiscoveryCarouselRow
-                    title={
-                      <>
-                        Since you liked <span className="text-orange-500">Food</span>
-                      </>
-                    }
-                    clubs={foodClubs}
-                    rowId="food"
-                    rowHeight={rowHeight}
-                  />
-
-                  <DiscoveryCarouselRow
-                    title={
-                      <>
-                        Since you liked <span className="text-orange-500">Soccer</span>
-                      </>
-                    }
-                    clubs={soccerClubs}
-                    rowId="soccer"
-                    rowHeight={rowHeight}
-                  />
+                  {interestRows.map((row) => (
+                    <DiscoveryCarouselRow
+                      key={row.interest}
+                      title={
+                        <>
+                          Since you liked <span className="text-orange-500">{row.interest}</span>
+                        </>
+                      }
+                      clubs={row.clubs}
+                      rowId={row.interest.toLowerCase().replace(/\s+/g, "-")}
+                      rowHeight={rowHeight}
+                    />
+                  ))}
                 </>
               )}
             </div>

@@ -44,7 +44,8 @@ export async function addInterest(userId: number, tagName: string) {
           create: { name: tagName }
         }
       }
-    }
+    },
+    select: { id: true, username: true, interests: true }
   });
 
   // Trigger ML recomputation (fire-and-forget, don't block response)
@@ -61,7 +62,8 @@ export async function removeInterest(userId: number, tagName: string) {
       interests: {
         disconnect: { name: tagName }
       }
-    }
+    },
+    select: { id: true, username: true, interests: true }
   });
 
   // Trigger ML recomputation (fire-and-forget, don't block response)

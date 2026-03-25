@@ -1,25 +1,38 @@
 // web-platform/src/app/(app)/personalize/page.tsx
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { mockInterests, type Interest } from "@/mocks/interests";
+import { type Interest } from "@/mocks/interests";
 import { Button } from "@/components/ui/button";
 import Input from "@/components/ui/input";
 import InterestPill from "@/components/InterestPill";
 import { api } from "@/lib/api";
-import useCurrentUser from "@/hooks/useCurrentUser";
 import { useAuth } from "@/context/AuthContext";
 
 export default function PersonalizePage() {
   const router = useRouter();
   const pathname = usePathname();
-  const { completeOnboarding } = useAuth();
-  const currentUserId = useCurrentUser(1);
+  const { user, hydrated } = useAuth();
+  const currentUserId = hydrated && user ? Number(user.id) : null;
 
   const [search, setSearch] = useState("");
-  const [interests, setInterests] = useState<Interest[]>(mockInterests);
+  const [interests, setInterests] = useState<Interest[]>([]);
+
+  // Load real tags from the database so they match what communities actually use
+  useEffect(() => {
+    api.tags.getAll().then((tags: any[]) => {
+      setInterests(
+        tags.map((t) => ({
+          id: String(t.id),
+          label: t.name,
+          category: "All",
+          selected: false,
+        }))
+      );
+    }).catch((err) => console.error("Failed to load tags:", err));
+  }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,19 +65,13 @@ export default function PersonalizePage() {
     const selected = interests.filter((i) => i.selected).map((i) => i.label);
     console.log("[Personalize] selected interests", selected);
 
-    // If nothing selected, still mark onboarding complete (if in onboarding flow)
+    // If nothing selected, skip to discovery
     if (selected.length === 0) {
       if (pathname?.startsWith("/onboarding")) {
-        console.log("[Personalize] no selection but inside onboarding - awaiting completeOnboarding()");
-        try {
-          await completeOnboarding();
-          console.log("[Personalize] completeOnboarding() awaited successfully");
-        } catch (err) {
-          console.error("[Personalize] completeOnboarding error", err);
-        }
+        router.push("/onboarding/recommended");
+      } else {
+        router.push("/discovery");
       }
-      console.log("[Personalize] navigating to /discovery");
-      router.push("/discovery");
       return;
     }
 
@@ -75,17 +82,10 @@ export default function PersonalizePage() {
       console.log("[Personalize] API save complete");
 
       if (pathname?.startsWith("/onboarding")) {
-        console.log("[Personalize] inside onboarding -> awaiting completeOnboarding()");
-        try {
-          await completeOnboarding();
-          console.log("[Personalize] completeOnboarding() awaited successfully");
-        } catch (err) {
-          console.error("[Personalize] completeOnboarding error", err);
-        }
+        router.push("/onboarding/recommended");
+      } else {
+        router.push("/discovery");
       }
-
-      console.log("[Personalize] navigating to /discovery");
-      router.push("/discovery");
     } catch (err: any) {
       console.error("[Personalize] Failed to save interests", err);
       setError(err?.message || "Failed to save interests");

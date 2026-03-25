@@ -19,8 +19,8 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import EventCard from "@/components/EventCard";
 import { api } from "@/lib/api";
-import useCurrentUser from "@/hooks/useCurrentUser";
-import { discoveryClubs, type DiscoveryClub } from "@/mocks/discovery";
+import { useAuth } from "@/context/AuthContext";
+import { type DiscoveryClub } from "@/mocks/discovery";
 import { mockClubs } from "@/mocks/clubs";
 
 /**
@@ -36,7 +36,8 @@ import { mockClubs } from "@/mocks/clubs";
 export default function ClubPageClient({ club: clubProp, events: eventsProp }: any) {
   const params = useParams(); // route params object in app router
   const routeId = (params as any)?.id ?? null; // e.g. "gator-grilling" or "1"
-  const currentUserId = useCurrentUser(1);
+  const { user, hydrated } = useAuth();
+  const currentUserId = hydrated && user ? Number(user.id) : null;
 
   const [club, setClub] = useState<any>(() => {
     // prefer prop if provided
@@ -96,17 +97,6 @@ export default function ClubPageClient({ club: clubProp, events: eventsProp }: a
 
         // 1) Try to find mock by id (string slug)
         if (routeId) {
-          const bySlug = discoveryClubs.find((d) => d.id === String(routeId));
-          if (bySlug) {
-            console.log("[ClubPage] found mock club by slug:", bySlug.name);
-            const mapped = mapMockToClub(bySlug);
-            if (!mounted) return;
-            setClub(mapped);
-            setEvents(mapped.events || []);
-            setJoined(Boolean(mapped.members?.some((m: any) => Number(m.userId) === Number(currentUserId))));
-            return;
-          }
-
           const bySidebarId = mockClubs.find((d: any) => d.id === String(routeId));
           if (bySidebarId) {
             console.log("[ClubPage] found sidebar mock club by id:", bySidebarId.name);
